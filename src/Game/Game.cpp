@@ -5,10 +5,11 @@
 #include <iostream>
 #include "../Logger/Logger.h"
 #include "../ECS/ECS.h"
-
-
+#include "../Components/TransformComponent.h"
+#include "../Components/RigidBodyComponent.h"
 Game::Game() {
     isRunning = false;
+    registry = std::make_unique<Registry>();
     Logger::Log("Game constructor called!");
 }
 
@@ -64,7 +65,13 @@ void Game::ProcessInput() {
 }
 
 void Game::Setup() {
-    
+    Entity tank = registry->CreateEntity();
+
+    // Add some components to that entity
+    registry->AddComponent<TransformComponent>(tank, glm::vec2(10.0,  30.0), glm::vec2(1.0, 1.0), 0.0);
+    registry->AddComponent<RigidBodyComponent>(tank, glm::vec2(50.0,  0.0));
+
+
 }
 
 void Game::Update() {

@@ -1,6 +1,6 @@
 #include "ECS.h"
 #include  <algorithm>
-
+#include "../Logger/Logger.h"
 
 int IComponent::nextId = 0;
 
@@ -35,6 +35,36 @@ Entity Registry::CreateEntity() {
     Entity entity(entityId);
     entitiesToBeAdded.insert(entity);
 
+    // Make sure the entityComponentSignatures vector can accomodate the new entity
+    if (entityId >= entityComponentSignatures.size()) {
+        entityComponentSignatures.reserve(entityId + 1);
+    }
+    
+    Logger::Log("Entity Create with id = " + std::to_string(entityId));
+
     return entity;
 }
 
+void Registry::AddEntityToSystem(Entity entity) {
+    const auto entityId = entity.GetId();
+
+    const auto& entityComponentSignature = entityComponentSignatures[entityId];
+
+    // loop all the systems
+    for (auto& system : systems) {
+        const auto& systemComponentSignature = system.second->GetComponentSignature();
+        bool isInterested = (entityComponentSignature & systemComponentSignature) == systemComponentSignature;
+        if (isInterested) {
+            system.second->AddEntityToSystem(entity);
+        }
+        
+    }
+}
+void Registry::Update() {
+    // Add the entities that are waiting to be created to the action System
+    for (auto entity : entitiesToBeAdded) {
+        AddEntityToSystem(entity);
+    }
+    entitiesToBeAdded.clear();
+
+}
