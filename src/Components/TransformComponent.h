@@ -12,11 +12,7 @@ struct TransformComponent {
         this->position = position;
         this->scale = scale;
         this->rotation = rotation;
-    }  
-
+    }
 };
-
-
-
 
 #endif
