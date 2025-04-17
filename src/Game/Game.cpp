@@ -1,4 +1,4 @@
-#include "Game.h"
+#include "./Game.h"
 #include "../Logger/Logger.h"
 #include "../ECS/ECS.h"
 #include "../Components/TransformComponent.h"
@@ -8,8 +8,9 @@
 #include "../Components/BoxColliderComponent.h"
 #include "../Components/KeyboardControlledComponent.h"
 #include "../Components/CameraFollowComponent.h"
-#include "../Components/HealthComponent.h"
 #include "../Components/ProjectileEmitterComponent.h"
+#include "../Components/HealthComponent.h"
+#include "../Components/TextLabelComponent.h"
 #include "../Systems/MovementSystem.h"
 #include "../Systems/CameraMovementSystem.h"
 #include "../Systems/RenderSystem.h"
@@ -17,14 +18,18 @@
 #include "../Systems/CollisionSystem.h"
 #include "../Systems/RenderColliderSystem.h"
 #include "../Systems/DamageSystem.h"
-#include "../Systems/KeyboardControlSystem.h"
 #include "../Systems/ProjectileEmitSystem.h"
+#include "../Systems/KeyboardControlSystem.h"
 #include "../Systems/ProjectileLifecycleSystem.h"
 #include "../Systems/RenderTextSystem.h"
+#include "../Systems/RenderHealthBarSystem.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>
 #include <glm/glm.hpp>
-#include <iostream>
+#include <imgui/imgui.h>
+#include <imgui/imgui_sdl.h>
+#include <imgui/imgui_impl_sdl.h>
 #include <fstream>
 
 int Game::windowWidth;
@@ -76,6 +81,10 @@ void Game::Initialize() {
         return;
     }
 
+    // Initialize the ImGui context
+    ImGui::CreateContext();
+    ImGuiSDL::Initialize(renderer, windowWidth, windowHeight);
+
     // Initialize the camera view with the entire screen area
     camera.x = 0;
     camera.y = 0;
@@ -89,6 +98,16 @@ void Game::Initialize() {
 void Game::ProcessInput() {
     SDL_Event sdlEvent;
     while (SDL_PollEvent(&sdlEvent)) {
+        // ImGui SDL input
+        ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
+        ImGuiIO& io = ImGui::GetIO();
+        int mouseX, mouseY;
+        const int buttons = SDL_GetMouseState(&mouseX, &mouseY);
+        io.MousePos = ImVec2(mouseX, mouseY);
+        io.MouseDown[0] = buttons & SDL_BUTTON(SDL_BUTTON_LEFT);
+        io.MouseDown[1] = buttons & SDL_BUTTON(SDL_BUTTON_RIGHT);
+
+        // Handle core SDL events (close window, key pressed, etc.)
         switch (sdlEvent.type) {
             case SDL_QUIT:
                 isRunning = false;
@@ -119,7 +138,7 @@ void Game::LoadLevel(int level) {
     registry->AddSystem<ProjectileEmitSystem>();
     registry->AddSystem<ProjectileLifecycleSystem>();
     registry->AddSystem<RenderTextSystem>();
-
+    registry->AddSystem<RenderHealthBarSystem>();
 
     // Adding assets to the asset store
     assetStore->AddTexture(renderer, "tank-image", "./assets/images/tank-panther-right.png");
@@ -160,7 +179,6 @@ void Game::LoadLevel(int level) {
     mapWidth = mapNumCols * tileSize * tileScale;
     mapHeight = mapNumRows * tileSize * tileScale;
 
-    // Create an entity
     // Create an entity
     Entity chopper = registry->CreateEntity();
     chopper.Tag("player");
@@ -227,6 +245,7 @@ void Game::Update() {
     registry->GetSystem<DamageSystem>().SubscribeToEvents(eventBus);
     registry->GetSystem<KeyboardControlSystem>().SubscribeToEvents(eventBus);
     registry->GetSystem<ProjectileEmitSystem>().SubscribeToEvents(eventBus);
+
     // Update the registry to process the entities that are waiting to be created/deleted
     registry->Update();
     
@@ -234,20 +253,28 @@ void Game::Update() {
     registry->GetSystem<MovementSystem>().Update(deltaTime);
     registry->GetSystem<AnimationSystem>().Update();
     registry->GetSystem<CollisionSystem>().Update(eventBus);
-    registry->GetSystem<CameraMovementSystem>().Update(camera);
     registry->GetSystem<ProjectileEmitSystem>().Update(registry);
+    registry->GetSystem<CameraMovementSystem>().Update(camera);
     registry->GetSystem<ProjectileLifecycleSystem>().Update();
 }
 
 void Game::Render() {
     SDL_SetRenderDrawColor(renderer, 21, 21, 21, 255);
     SDL_RenderClear(renderer);
-    registry->GetSystem<RenderTextSystem>().Update(renderer, assetStore, camera);
+
     // Invoke all the systems that need to render 
     registry->GetSystem<RenderSystem>().Update(renderer, assetStore, camera);
+    registry->GetSystem<RenderTextSystem>().Update(renderer, assetStore, camera);
+    registry->GetSystem<RenderHealthBarSystem>().Update(renderer, assetStore, camera);
     if (isDebug) {
         registry->GetSystem<RenderColliderSystem>().Update(renderer, camera);
+
+        ImGui::NewFrame();
+        ImGui::ShowDemoWindow();
+        ImGui::Render();
+        ImGuiSDL::Render(ImGui::GetDrawData());
     }
+
     SDL_RenderPresent(renderer);
 }
 
@@ -261,6 +288,8 @@ void Game::Run() {
 }
 
 void Game::Destroy() {
+    ImGuiSDL::Deinitialize();
+    ImGui::DestroyContext();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
